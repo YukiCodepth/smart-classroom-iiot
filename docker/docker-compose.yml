@@ -1,4 +1,3 @@
-
 services:
   # 1. Industrial MQTT v5.0 Message Broker
   emqx:
@@ -6,8 +5,8 @@ services:
     container_name: iiot_emqx_broker
     restart: always
     ports:
-      - "1883:1883"     # MQTT TCP Protocol Port
-      - "18083:18083"   # Web Management Dashboard UI
+      - "1883:1883"
+      - "18083:18083"
     environment:
       - EMQX_DASHBOARD__DEFAULT_USERNAME=admin
       - EMQX_DASHBOARD__DEFAULT_PASSWORD=ResearchAdmin2026!
@@ -34,7 +33,7 @@ services:
     networks:
       - iiot_network
 
-  # 3. Enterprise Visual Dashboard Engine
+  # 3. Enterprise Visual Dashboard Engine (With IaC Auto-Provisioning!)
   grafana:
     image: grafana/grafana:10.2.0
     container_name: iiot_grafana_ui
@@ -43,6 +42,8 @@ services:
       - "3000:3000"
     volumes:
       - grafana-storage:/var/lib/grafana
+      - ./grafana-provisioning/datasources:/etc/grafana/provisioning/datasources
+      - ./grafana-provisioning/dashboards:/etc/grafana/provisioning/dashboards
     depends_on:
       - influxdb
     environment:
