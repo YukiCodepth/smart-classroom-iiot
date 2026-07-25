@@ -1,0 +1,16 @@
+apiVersion: 1
+
+datasources:
+  - name: InfluxDB-IIoT-Historian
+    type: influxdb
+    access: proxy
+    url: http://influxdb:8086
+    jsonData:
+      version: Flux
+      organization: UROP_Research_Lab
+      defaultBucket: classroom_telemetry
+      tlsSkipVerify: true
+    secureJsonData:
+      token: urop-2026-super-secret-enterprise-token
+    isDefault: true
+    editable: true
