@@ -1,0 +1,61 @@
+
+services:
+  # 1. Industrial MQTT v5.0 Message Broker
+  emqx:
+    image: emqx/emqx:5.3.0
+    container_name: iiot_emqx_broker
+    restart: always
+    ports:
+      - "1883:1883"     # MQTT TCP Protocol Port
+      - "18083:18083"   # Web Management Dashboard UI
+    environment:
+      - EMQX_DASHBOARD__DEFAULT_USERNAME=admin
+      - EMQX_DASHBOARD__DEFAULT_PASSWORD=ResearchAdmin2026!
+      - EMQX_ALLOW_ANONYMOUS=true
+    networks:
+      - iiot_network
+
+  # 2. Time-Series Data Historian (TSDB)
+  influxdb:
+    image: influxdb:2.7
+    container_name: iiot_influxdb_tsdb
+    restart: always
+    ports:
+      - "8086:8086"
+    volumes:
+      - influxdb-storage:/var/lib/influxdb2
+    environment:
+      - DOCKER_INFLUXDB_INIT_MODE=setup
+      - DOCKER_INFLUXDB_INIT_USERNAME=researcher
+      - DOCKER_INFLUXDB_INIT_PASSWORD=ResearchPassword2026!
+      - DOCKER_INFLUXDB_INIT_ORG=UROP_Research_Lab
+      - DOCKER_INFLUXDB_INIT_BUCKET=classroom_telemetry
+      - DOCKER_INFLUXDB_INIT_ADMIN_TOKEN=urop-2026-super-secret-enterprise-token
+    networks:
+      - iiot_network
+
+  # 3. Enterprise Visual Dashboard Engine
+  grafana:
+    image: grafana/grafana:10.2.0
+    container_name: iiot_grafana_ui
+    restart: always
+    ports:
+      - "3000:3000"
+    volumes:
+      - grafana-storage:/var/lib/grafana
+    depends_on:
+      - influxdb
+    environment:
+      - GF_SECURITY_ADMIN_USER=admin
+      - GF_SECURITY_ADMIN_PASSWORD=ResearchAdmin2026!
+      - GF_USERS_ALLOW_SIGN_UP=false
+    networks:
+      - iiot_network
+
+networks:
+  iiot_network:
+    driver: bridge
+
+volumes:
+  influxdb-storage:
+  grafana-storage:
