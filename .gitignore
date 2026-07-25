@@ -1,0 +1,15 @@
+# Environments & Secrets
+.env
+venv/
+__pycache__/
+*.pyc
+
+# Docker & Database Persistent Storage Volumes
+docker/influxdb-storage/
+docker/grafana-storage/
+
+# Compiled Firmware & IDE Configurations
+.pio/
+.vscode/
+*.bin
+*.elf
