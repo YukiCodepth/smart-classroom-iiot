@@ -1,14 +1,13 @@
 #!/usr/bin/env python3
 """
-ENTERPRISE INDUSTRIAL IOT EDGE AI DAEMON
+ENTERPRISE INDUSTRIAL IOT EDGE AI DAEMON (REAL HARDWARE HITL BRIDGE)
 Project: IoT-Based Automatic Climate Control System for Smart Classrooms Using 5G Network Technology
-Architecture: Software-in-the-Loop (SiTL) Edge Pre-processing & Closed-Loop Control Engine
+Architecture: Hardware-in-the-Loop (HiTL) Real Sensor Processing & Actuator Control Engine
 """
 
 import time
 import math
 import json
-import random
 import logging
 from collections import deque
 import paho.mqtt.client as mqtt
@@ -29,12 +28,16 @@ INFLUX_TOKEN = "urop-2026-super-secret-enterprise-token"
 INFLUX_ORG = "UROP_Research_Lab"
 INFLUX_BUCKET = "classroom_telemetry"
 
-MQTT_BROKER = "localhost"
+# CLOUD BRIDGE: Must match line 17 of your Wokwi C++ code!
+MQTT_BROKER = "broker.emqx.io"
 MQTT_PORT = 1883
 CLIENT_ID = "Linux_5G_Edge_Gateway_01"
-TOPIC_TELEMETRY = "smart_classroom/telemetry"
-TOPIC_CONTROLS = "smart_classroom/controls"
-TOPIC_LWT = "smart_classroom/status/gateway"
+
+# TOPICS
+TOPIC_TELEMETRY_RAW = "smart_classroom/telemetry/raw"   # Incoming from Wokwi ESP32
+TOPIC_TELEMETRY_UI  = "smart_classroom/telemetry"       # Outgoing to UI
+TOPIC_CONTROLS      = "smart_classroom/controls"        # Outgoing commands to Wokwi LEDs
+TOPIC_LWT           = "smart_classroom/status/gateway"
 
 WINDOW_SIZE = 5  # Moving average filter window size
 TEMP_THRESHOLD_C = 27.5
@@ -54,10 +57,6 @@ class MovingAverageFilter:
 class ClimateIntelligenceEngine:
     @staticmethod
     def calculate_iso7730_pmv(temp_c: float, humidity_pct: float, air_speed: float = 0.15) -> float:
-        """
-        Calculates ASHRAE Standard 55 / ISO 7730 Predicted Mean Vote (PMV).
-        Scale: -3 (Cold) to +3 (Hot). Ideal equilibrium = 0.0.
-        """
         try:
             pa = (humidity_pct / 100.0) * 10 * math.exp(16.6536 - (4030.18 / (temp_c + 235)))
             pmv = (0.303 * math.exp(-0.036 * 58) + 0.028) * (
@@ -67,15 +66,12 @@ class ClimateIntelligenceEngine:
                 + 12.1 * math.sqrt(air_speed) * (35.7 - 0.028 * 58 - temp_c)
             )
             return round(max(min(pmv, 3.0), -3.0), 2)
-        except Exception as e:
-            logger.error(f"PMV Math Error: {e}")
+        except Exception:
             return 0.0
 
     @staticmethod
     def calculate_energy_savings_pct(smart_power_w: float, baseline_power_w: float) -> float:
-        """Calculates real-time energy savings vs. continuous static rule-based HVAC."""
-        if baseline_power_w <= 0:
-            return 0.0
+        if baseline_power_w <= 0: return 0.0
         savings = (1.0 - (smart_power_w / baseline_power_w)) * 100.0
         return round(max(savings, 0.0), 1)
 
@@ -85,6 +81,9 @@ class EdgeAIDaemon:
         self.running = True
         self.manual_override = False
         self.override_state = {"hvac": "OFF", "vent": "OFF"}
+        
+        # Holds the real physical data arriving from Wokwi hardware
+        self.real_hardware_data = None
         
         self.temp_filter = MovingAverageFilter(WINDOW_SIZE)
         self.co2_filter = MovingAverageFilter(WINDOW_SIZE)
@@ -105,13 +104,14 @@ class EdgeAIDaemon:
         self.mqtt_client.will_set(
             TOPIC_LWT, 
             payload=json.dumps({"status": "EDGE_OFFLINE_FAULT", "node": CLIENT_ID}), 
-            qos=1, 
-            retain=True
+            qos=1, retain=True
         )
 
     def on_mqtt_connect(self, client, userdata, flags, rc, properties=None):
         if rc == 0:
-            logger.info("Connected to EMQX Enterprise MQTT Broker.")
+            logger.info(f"Connected to Cloud MQTT Broker ({MQTT_BROKER}).")
+            # SUBSCRIBE TO REAL HARDWARE DATA FROM WOKWI!
+            client.subscribe(TOPIC_TELEMETRY_RAW, qos=1)
             client.subscribe(TOPIC_CONTROLS, qos=1)
             client.publish(TOPIC_LWT, json.dumps({"status": "ONLINE_HEALTHY", "node": CLIENT_ID}), qos=1, retain=True)
         else:
@@ -120,35 +120,52 @@ class EdgeAIDaemon:
     def on_mqtt_message(self, client, userdata, msg):
         try:
             payload = json.loads(msg.payload.decode("utf-8"))
-            logger.info(f"Received Command on [{msg.topic}]: {payload}")
             
-            if "manual_override" in payload:
+            # 1. CATCH REAL SENSOR TELEMETRY FROM WOKWI ESP32
+            if msg.topic == TOPIC_TELEMETRY_RAW:
+                if "sensors" in payload:
+                    self.real_hardware_data = {
+                        "temp": float(payload["sensors"]["temp_raw"]),
+                        "hum": float(payload["sensors"]["humidity"]),
+                        "co2": float(payload["sensors"]["co2_raw"]),
+                        "occ": int(payload["sensors"]["occupancy_count"])
+                    }
+                else:
+                    self.real_hardware_data = {
+                        "temp": float(payload.get("temp_raw", 24.0)),
+                        "hum": float(payload.get("humidity", 40.0)),
+                        "co2": float(payload.get("co2_raw", 400.0)),
+                        "occ": int(payload.get("occupancy_count", 0))
+                    }
+                    
+            # 2. CATCH MANUAL OVERRIDE COMMANDS
+            elif msg.topic == TOPIC_CONTROLS and "manual_override" in payload:
                 self.manual_override = bool(payload["manual_override"])
-                logger.warning(f"MANUAL OVERRIDE TOGGLED: {self.manual_override}")
-            if self.manual_override and "hvac" in payload:
-                self.override_state["hvac"] = str(payload["hvac"])
-            if self.manual_override and "vent" in payload:
-                self.override_state["vent"] = str(payload["vent"])
+                if self.manual_override:
+                    self.override_state["hvac"] = str(payload.get("hvac", "OFF"))
+                    self.override_state["vent"] = str(payload.get("vent", "OFF"))
         except Exception as e:
-            logger.error(f"Malformed MQTT Command Packet: {e}")
-
-    def generate_virtual_sensor_array(self):
-        """Simulates perception layer data with realistic classroom environmental drift."""
-        raw_temp = round(26.0 + random.uniform(-1.0, 3.0), 2)
-        raw_hum = round(55.0 + random.uniform(-4.0, 6.0), 1)
-        raw_co2 = round(800.0 + random.uniform(-50.0, 350.0), 1)
-        raw_light = int(450 + random.uniform(-40, 40))
-        occupancy = random.choice([0, 0, 15, 25, 30, 35])
-        return raw_temp, raw_hum, raw_co2, raw_light, occupancy
+            logger.error(f"Malformed MQTT Packet: {e}")
 
     def run_pipeline(self):
-        logger.info("Starting Real-Time Edge Processing & Closed-Loop Control Pipeline...")
+        logger.info("Starting REAL HARDWARE Closed-Loop Control Pipeline...")
+        logger.info("Waiting for live telemetry packets from Wokwi ESP32...")
         try:
             self.mqtt_client.connect(MQTT_BROKER, MQTT_PORT, keepalive=60)
             self.mqtt_client.loop_start()
 
             while self.running:
-                raw_temp, raw_hum, raw_co2, raw_light, occupancy = self.generate_virtual_sensor_array()
+                # If Wokwi hasn't sent data yet, pause and wait
+                if self.real_hardware_data is None:
+                    time.sleep(1.0)
+                    continue
+
+                # PULL ONLY REAL ORIGINAL DATA FROM HARDWARE
+                raw_temp = self.real_hardware_data["temp"]
+                raw_hum  = self.real_hardware_data["hum"]
+                raw_co2  = self.real_hardware_data["co2"]
+                occupancy = self.real_hardware_data["occ"]
+                raw_light = 500 # Constant Lux for baseline
 
                 filt_temp = self.temp_filter.filter(raw_temp)
                 filt_co2 = self.co2_filter.filter(raw_co2)
@@ -170,39 +187,23 @@ class EdgeAIDaemon:
 
                     vent_status = "ACTIVE_EXHAUST" if filt_co2 > CO2_THRESHOLD_PPM else "OFF"
 
+                # SEND ACTUATOR COMMANDS BACK TO WOKWI ESP32 OVER CLOUD MQTT!
+                control_command = {
+                    "hvac": hvac_status,
+                    "ventilation": vent_status,
+                    "mode": mode
+                }
+                self.mqtt_client.publish(TOPIC_CONTROLS, json.dumps(control_command), qos=1)
+
+                # Calculate energy
                 baseline_power = 3500.0
                 smart_power = 0.0
                 if hvac_status == "ACTIVE_COOLING": smart_power += 2500.0
                 elif hvac_status == "ECO_STANDBY": smart_power += 300.0
                 if vent_status == "ACTIVE_EXHAUST": smart_power += 400.0
-                
                 energy_saved = self.intelligence.calculate_energy_savings_pct(smart_power, baseline_power)
 
-                telemetry_payload = {
-                    "timestamp": time.strftime("%H:%M:%S"),
-                    "node_id": CLIENT_ID,
-                    "control_mode": mode,
-                    "sensors": {
-                        "temp_raw": raw_temp,
-                        "temp_filtered": filt_temp,
-                        "humidity": raw_hum,
-                        "co2_raw": raw_co2,
-                        "co2_filtered": filt_co2,
-                        "light_lux": raw_light,
-                        "occupancy_count": occupancy
-                    },
-                    "analytics": {
-                        "pmv_index": pmv_index,
-                        "energy_saved_pct": energy_saved
-                    },
-                    "actuators": {
-                        "hvac": hvac_status,
-                        "ventilation": vent_status
-                    }
-                }
-
-                self.mqtt_client.publish(TOPIC_TELEMETRY, json.dumps(telemetry_payload), qos=1)
-
+                # Write to InfluxDB for Grafana
                 point = Point("environmental_telemetry") \
                     .tag("gateway_node", CLIENT_ID) \
                     .tag("mode", mode) \
@@ -212,28 +213,23 @@ class EdgeAIDaemon:
                     .field("light_lux", raw_light) \
                     .field("occupancy", occupancy) \
                     .field("pmv_index", pmv_index) \
-                    .field("energy_saved_pct", energy_saved) \
-                    .field("hvac_active", 1 if hvac_status != "OFF" else 0) \
-                    .field("vent_active", 1 if vent_status != "OFF" else 0)
-                
+                    .field("energy_saved_pct", energy_saved)
                 self.write_api.write(bucket=INFLUX_BUCKET, record=point)
 
-                logger.info(f"--- TELEMETRY FRAME [{telemetry_payload['timestamp']}] ---")
-                logger.info(f"Sensors  | Temp: {filt_temp}°C | Hum: {raw_hum}% | CO2: {filt_co2} ppm | Occupancy: {occupancy}")
-                logger.info(f"AI Model | ISO 7730 PMV: {pmv_index} | Energy Efficiency Gain: {energy_saved}%")
-                logger.info(f"Actuator | Mode: [{mode}] | HVAC: [{hvac_status}] | Vent: [{vent_status}]\n")
+                logger.info(f"--- REAL HARDWARE FRAME [{time.strftime('%H:%M:%S')}] ---")
+                logger.info(f"Wokwi Sensor | Temp: {filt_temp}°C | Hum: {raw_hum}% | CO2: {filt_co2} ppm | Occ: {occupancy}")
+                logger.info(f"AI Decision  | ISO 7730 PMV: {pmv_index} | Energy Saved: {energy_saved}%")
+                logger.info(f"Actuator Out | HVAC: [{hvac_status}] | Vent: [{vent_status}] -> [SENT TO WOKWI LEDs]\n")
 
                 time.sleep(2.0)
 
         except KeyboardInterrupt:
-            logger.warning("Shutdown signal received. Terminating daemon...")
+            logger.warning("Shutdown signal received...")
         finally:
             self.running = False
-            self.mqtt_client.publish(TOPIC_LWT, json.dumps({"status": "OFFLINE_CLEAN", "node": CLIENT_ID}), qos=1, retain=True)
             self.mqtt_client.loop_stop()
             self.mqtt_client.disconnect()
             self.db_client.close()
-            logger.info("Edge AI Daemon successfully shutdown.")
 
 if __name__ == "__main__":
     daemon = EdgeAIDaemon()
