@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
 """
-ENTERPRISE INDUSTRIAL IOT EDGE AI DAEMON (ADVANCED ML FORECASTING MODE)
+ENTERPRISE INDUSTRIAL IOT EDGE AI DAEMON (PHASE 6.3: FULL OBSERVABILITY MATRIX)
 Project: IoT-Based Automatic Climate Control System for Smart Classrooms Using 5G Network Technology
-Architecture: Online Stochastic Gradient Descent Thermodynamic Prediction & HiTL Bridge
+Architecture: Hard Physical Gating, ML Training Freeze & Complete Visual Telemetry Matrix
 """
 
 import time
@@ -17,7 +17,6 @@ import paho.mqtt.client as mqtt
 from influxdb_client import InfluxDBClient, Point
 from influxdb_client.client.write_api import SYNCHRONOUS
 
-# --- INDUSTRIAL LOGGING CONFIGURATION ---
 logging.basicConfig(
     level=logging.INFO,
     format="%(asctime)s [%(levelname)s] (%(threadName)-10s) %(message)s",
@@ -25,7 +24,6 @@ logging.basicConfig(
 )
 logger = logging.getLogger("EdgeAIDaemon")
 
-# --- ENTERPRISE CONSTANTS & CONFIGURATION ---
 INFLUX_URL = "http://localhost:8086"
 INFLUX_TOKEN = "urop-2026-super-secret-enterprise-token"
 INFLUX_ORG = "UROP_Research_Lab"
@@ -43,50 +41,44 @@ WINDOW_SIZE = 5
 TEMP_THRESHOLD_C = 27.5
 CO2_THRESHOLD_PPM = 1000.0
 
-# --- ADVANCED ONLINE ML THERMODYNAMIC PREDICTOR ---
 class OnlineThermodynamicPredictor:
-    """
-    Real-Time Edge Machine Learning Engine.
-    Uses Stochastic Gradient Descent (SGD) to continuously learn room heat transfer physics
-    from live sensor streams and forecast temperature 15 minutes into the future.
-    """
     def __init__(self):
         self.model = SGDRegressor(max_iter=1000, tol=1e-3, learning_rate='invscaling', eta0=0.01)
         self.scaler = StandardScaler()
-        self.history = deque(maxlen=30) # Stores last 60 seconds of features for continuous fitting
+        self.history = deque(maxlen=30)
         self.is_fitted = False
+        self.last_valid_prediction = 26.0
 
-    def update_and_predict(self, current_temp: float, humidity: float, occupancy: int) -> float:
-        # Feature vector: [Current Temp, Humidity, Occupancy, Estimated Body Heat Gain (W)]
-        body_heat_gain = occupancy * 100.0 # ~100 Watts of biological heat radiation per person
+    def update_and_predict(self, current_temp: float, humidity: float, occupancy: int, is_poisoned: bool) -> float:
+        body_heat_gain = occupancy * 100.0
         features = np.array([[current_temp, humidity, occupancy, body_heat_gain]])
         
-        self.history.append((features[0], current_temp))
+        if not is_poisoned:
+            self.history.append((features[0], current_temp))
+            if len(self.history) >= 5:
+                X_train = np.array([item[0] for item in self.history])
+                y_train = np.array([item[1] for item in self.history])
+                X_scaled = self.scaler.fit_transform(X_train)
+                self.model.partial_fit(X_scaled, y_train)
+                self.is_fitted = True
+        else:
+            logger.warning("🚨 [ML PROTECTED] Freezing SGD weight updates to prevent neural poisoning!")
         
-        # We need at least 5 frames of real hardware data before initiating online gradient descent
-        if len(self.history) >= 5:
-            X_train = np.array([item[0] for item in self.history])
-            y_train = np.array([item[1] for item in self.history])
-            
-            # Online partial fitting to adapt to real-time classroom environmental drift
-            X_scaled = self.scaler.fit_transform(X_train)
-            self.model.partial_fit(X_scaled, y_train)
-            self.is_fitted = True
-            
-            # Predict room thermodynamic inertia 15 minutes ahead (+900 seconds)
-            # Future prediction assumes occupancy remains constant, projecting heat accumulation
-            future_heat_gain = body_heat_gain * 1.15 # 15% cumulative heat trapping factor
+        if self.is_fitted and len(self.history) >= 5:
+            future_heat_gain = body_heat_gain * 1.15
             X_future = np.array([[current_temp, humidity, occupancy, future_heat_gain]])
             X_future_scaled = self.scaler.transform(X_future)
             predicted_temp = self.model.predict(X_future_scaled)[0]
             
-            # Calculate thermal velocity (slope of temperature change)
             thermal_velocity = (current_temp - self.history[0][1]) / len(self.history)
-            return round(predicted_temp + (thermal_velocity * 15.0), 2)
-        
+            raw_pred = predicted_temp + (thermal_velocity * 15.0)
+            
+            clamped_pred = round(max(min(raw_pred, 45.0), 10.0), 2)
+            self.last_valid_prediction = clamped_pred
+            return clamped_pred
+            
         return round(current_temp, 2)
 
-# --- EDGE SIGNAL PROCESSING & PMV COMFORT CLASS ---
 class MovingAverageFilter:
     def __init__(self, window_size: int):
         self.buffer = deque(maxlen=window_size)
@@ -115,7 +107,6 @@ class ClimateIntelligenceEngine:
         savings = (1.0 - (smart_power_w / baseline_power_w)) * 100.0
         return round(max(savings, 0.0), 1)
 
-# --- MAIN INDUSTRIAL DAEMON CLASS ---
 class EdgeAIDaemon:
     def __init__(self):
         self.running = True
@@ -157,21 +148,17 @@ class EdgeAIDaemon:
     def on_mqtt_message(self, client, userdata, msg):
         try:
             payload = json.loads(msg.payload.decode("utf-8"))
-            if msg.topic == TOPIC_TELEMETRY_RAW:
-                if "sensors" in payload:
-                    self.real_hardware_data = {
-                        "temp": float(payload["sensors"]["temp_raw"]),
-                        "hum": float(payload["sensors"]["humidity"]),
-                        "co2": float(payload["sensors"]["co2_raw"]),
-                        "occ": int(payload["sensors"]["occupancy_count"])
-                    }
-                else:
-                    self.real_hardware_data = {
-                        "temp": float(payload.get("temp_raw", 24.0)),
-                        "hum": float(payload.get("humidity", 40.0)),
-                        "co2": float(payload.get("co2_raw", 400.0)),
-                        "occ": int(payload.get("occupancy_count", 0))
-                    }
+            if msg.topic == TOPIC_TELEMETRY_RAW and "sensors" in payload:
+                s = payload["sensors"]
+                self.real_hardware_data = {
+                    "temp_raw": float(s.get("temp_raw", 24.0)),
+                    "temp_kalman": float(s.get("temp_kalman", 24.0)),
+                    "hum": float(s.get("humidity", 40.0)),
+                    "co2": float(s.get("co2_raw", 400.0)),
+                    "occ": int(s.get("occupancy_count", 0)),
+                    "z_score": float(s.get("anomaly_score", 0.0)),
+                    "status": str(s.get("status", "HEALTHY"))
+                }
             elif msg.topic == TOPIC_CONTROLS and "manual_override" in payload:
                 self.manual_override = bool(payload["manual_override"])
                 if self.manual_override:
@@ -181,8 +168,8 @@ class EdgeAIDaemon:
             logger.error(f"Malformed MQTT Packet: {e}")
 
     def run_pipeline(self):
-        logger.info("Starting ADVANCED ML FORECASTING Closed-Loop Control Pipeline...")
-        logger.info("Waiting for live hardware telemetry from Wokwi ESP32...")
+        logger.info("Starting BULLETPROOF SAFE-STATE Full Observability Pipeline...")
+        logger.info("Waiting for live telemetry from Wokwi ESP32...")
         try:
             self.mqtt_client.connect(MQTT_BROKER, MQTT_PORT, keepalive=60)
             self.mqtt_client.loop_start()
@@ -192,17 +179,28 @@ class EdgeAIDaemon:
                     time.sleep(1.0)
                     continue
 
-                raw_temp = self.real_hardware_data["temp"]
-                raw_hum  = self.real_hardware_data["hum"]
-                raw_co2  = self.real_hardware_data["co2"]
-                occupancy = self.real_hardware_data["occ"]
-                raw_light = 500
+                raw_temp    = self.real_hardware_data["temp_raw"]
+                kalman_temp = self.real_hardware_data["temp_kalman"]
+                raw_hum     = self.real_hardware_data["hum"]
+                raw_co2     = self.real_hardware_data["co2"]
+                occupancy   = self.real_hardware_data["occ"]
+                z_score     = self.real_hardware_data["z_score"]
+                status      = self.real_hardware_data["status"]
+                raw_light   = 500
 
-                filt_temp = self.temp_filter.filter(raw_temp)
-                filt_co2 = self.co2_filter.filter(raw_co2)
+                is_poisoned = (status != "HEALTHY")
 
-                # Execute Online ML Prediction
-                pred_temp_15m = self.ml_predictor.update_and_predict(filt_temp, raw_hum, occupancy)
+                if is_poisoned:
+                    logger.warning(f"🚨 [CYBER SHIELD ACTIVE!] Fault Type: [{status}] | Z: {z_score}σ")
+                    logger.warning(f"🚨 Rejecting Corrupted Spike ({raw_temp}°C) -> Quarantined Kalman Hold ({kalman_temp}°C)!")
+                    working_temp = kalman_temp
+                else:
+                    working_temp = raw_temp
+
+                filt_temp = self.temp_filter.filter(working_temp)
+                filt_co2  = self.co2_filter.filter(raw_co2)
+
+                pred_temp_15m = self.ml_predictor.update_and_predict(filt_temp, raw_hum, occupancy, is_poisoned)
                 pmv_index = self.intelligence.calculate_iso7730_pmv(filt_temp, raw_hum)
 
                 if self.manual_override:
@@ -210,8 +208,7 @@ class EdgeAIDaemon:
                     vent_status = self.override_state["vent"]
                     mode = "MANUAL_OVERRIDE"
                 else:
-                    mode = "AI_AUTOMATED"
-                    # ADVANCED PREDICTIVE LOGIC: Trigger Pre-Cooling before the room actually overheats!
+                    mode = "AI_AUTOMATED" if not is_poisoned else f"SAFE_STATE_{status}"
                     if pred_temp_15m >= TEMP_THRESHOLD_C and filt_temp < TEMP_THRESHOLD_C and occupancy > 0:
                         hvac_status = "PRE_COOLING_ACTIVE"
                         mode = "AI_PREDICTIVE_ECO"
@@ -235,7 +232,7 @@ class EdgeAIDaemon:
                 baseline_power = 3500.0
                 smart_power = 0.0
                 if hvac_status == "ACTIVE_COOLING": smart_power += 2500.0
-                elif hvac_status == "PRE_COOLING_ACTIVE": smart_power += 1200.0 # Low-power inverter mode
+                elif hvac_status == "PRE_COOLING_ACTIVE": smart_power += 1200.0
                 elif hvac_status == "ECO_STANDBY": smart_power += 300.0
                 if vent_status == "ACTIVE_EXHAUST": smart_power += 400.0
                 energy_saved = self.intelligence.calculate_energy_savings_pct(smart_power, baseline_power)
@@ -243,8 +240,12 @@ class EdgeAIDaemon:
                 point = Point("environmental_telemetry") \
                     .tag("gateway_node", CLIENT_ID) \
                     .tag("mode", mode) \
+                    .tag("sensor_health", status) \
+                    .field("temp_raw", raw_temp) \
+                    .field("temp_kalman", kalman_temp) \
                     .field("temp_filtered", filt_temp) \
                     .field("temp_predicted_15m", pred_temp_15m) \
+                    .field("anomaly_z_score", z_score) \
                     .field("humidity", raw_hum) \
                     .field("co2_filtered", filt_co2) \
                     .field("light_lux", raw_light) \
@@ -253,10 +254,11 @@ class EdgeAIDaemon:
                     .field("energy_saved_pct", energy_saved)
                 self.write_api.write(bucket=INFLUX_BUCKET, record=point)
 
-                logger.info(f"--- REAL HARDWARE ML FRAME [{time.strftime('%H:%M:%S')}] ---")
-                logger.info(f"Sensors Read | Temp: {filt_temp}°C | Hum: {raw_hum}% | CO2: {filt_co2} ppm | Occ: {occupancy}")
+                # --- 100% FULL OBSERVABILITY MATRIX VISUAL PRINT ---
+                logger.info(f"--- TINYML HEALTH FRAME [{time.strftime('%H:%M:%S')}] ---")
+                logger.info(f"Sensor In    | Temp: {raw_temp}°C (Kalman: {kalman_temp}°C) | Hum: {raw_hum}% | CO2: {filt_co2} ppm | Occ: {occupancy} | Z: {z_score}σ => [{status}]")
                 logger.info(f"ML Forecast  | Predicted Temp in +15m: {pred_temp_15m}°C | Mode: [{mode}]")
-                logger.info(f"AI Actuators | HVAC: [{hvac_status}] | Energy Saved: {energy_saved}%\n")
+                logger.info(f"AI Actuators | HVAC: [{hvac_status}] | Exhaust Vent: [{vent_status}] | Energy Saved: {energy_saved}%\n")
 
                 time.sleep(2.0)
 
