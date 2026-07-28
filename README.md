@@ -199,15 +199,3 @@ python3 edge-daemon/edge_ai_daemon.py
 * **TSDB Tag Cardinality:** Never store mutable state strings (`mode`, `sensor_health`) as InfluxDB **Tags**. Tags spawn isolated database tables, causing Grafana to fragment charts into repetitive, broken UI series. Always store dynamic states as **Fields**.
 
 ```
-
----
-
-### Push Your New Showcase README:
-Open your Linux terminal and push this clean build straight to GitHub:
-
-```bash
-git add README.md
-git commit -m "docs: polish README with crisp engineering prose and technical aesthetic emojis"
-git push
-
-```
