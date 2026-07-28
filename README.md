@@ -27,15 +27,15 @@ To prevent corrupted sensor spikes or cyber injection attacks from triggering HV
 
 ```mermaid
 graph TD
-    A[Raw Sensor Input] --> B{Layer 1: Physical Gate<br/>10°C to 45°C | 5% to 99% RH}
-    B -- Out of Bounds --> C[🚨 HARD FAULT: Quarantine Kalman<br/>Hold Last Known Valid Estimate]
-    B -- Plausible --> D[Layer 2: Quarantined Kalman Filter<br/>Recursive Error Estimation]
-    D --> E{Layer 3: Z-Score Guard<br/>Evaluate Residual against σ}
-    E -- Z > 3.0σ --> F[🚨 STATISTICAL SPIKE: Trap Attack<br/>Increment Leaky Bucket Counter]
-    E -- Z ≤ 3.0σ --> G[✔️ HEALTHY: Update Variance Buffer<br/>Dispatch Telemetry Frame]
-    F -- 4 Consecutive Anomalies --> H[🔄 STEP-CHANGE RECOVERY<br/>Auto-Reconverge Kalman & Reset Z-Guard]
+    A["Raw Sensor Input"] --> B{"Layer 1: Physical Gate<br/>10°C to 45°C | 5% to 99% RH"}
+    B -- Out of Bounds --> C["🚨 HARD FAULT: Quarantine Kalman<br/>Hold Last Known Valid Estimate"]
+    B -- Plausible --> D["Layer 2: Quarantined Kalman Filter<br/>Recursive Error Estimation"]
+    D --> E{"Layer 3: Z-Score Guard<br/>Evaluate Residual against σ"}
+    E -- Z > 3.0σ --> F["🚨 STATISTICAL SPIKE: Trap Attack<br/>Increment Leaky Bucket Counter"]
+    E -- Z ≤ 3.0σ --> G["✔️ HEALTHY: Update Variance Buffer<br/>Dispatch Telemetry Frame"]
+    F -- 4 Consecutive Anomalies --> H["🔄 STEP-CHANGE RECOVERY<br/>Auto-Reconverge Kalman & Reset Z-Guard"]
 
-```
+```    
 
 * **Layer 1 (Physical Plausibility Gate):** Instantly rejects impossible hardware spikes (**80°C** or **-40°C**) before they enter memory buffers.
 * **Layer 2 (Quarantined Kalman Filter):** Smooths Gaussian noise. If an anomaly is detected, it freezes estimation updates to hold steady-state HVAC control.
