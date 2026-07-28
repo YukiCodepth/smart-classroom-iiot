@@ -1,51 +1,52 @@
-# ⚡ Industrial IoT Climate Control & Energy Economizer
-### *Autonomous Smart Classroom Management Powered by 5G Network Slicing & Edge AI*
+# 📡 Industrial IoT Smart Classroom & 5G Edge Gateway
+### *Autonomous Climate Control, Predictive Energy Economizer & On-Chip Cyber Shield*
 
-![Enterprise IIoT](https://img.shields.io/badge/Architecture-Industrial%20Edge%20AI-0052FF?style=for-the-badge&logo=arm&logoColor=white)
-![Firmware](https://img.shields.io/badge/Firmware-Embedded%20C%2B%2B-00599C?style=for-the-badge&logo=c%2B%2B&logoColor=white)
+![Architecture](https://img.shields.io/badge/Architecture-5G%20IIoT%20Edge-0052FF?style=for-the-badge&logo=arm&logoColor=white)
+![Firmware](https://img.shields.io/badge/Firmware-ESP32%20C%2B%2B-00599C?style=for-the-badge&logo=c%2B%2B&logoColor=white)
 ![Gateway](https://img.shields.io/badge/Gateway-Python%203.10%2B-3776AB?style=for-the-badge&logo=python&logoColor=white)
-![Database](https://img.shields.io/badge/Historian-InfluxDB%202.7-22ADF6?style=for-the-badge&logo=influxdb&logoColor=white)
-![Visualization](https://img.shields.io/badge/Observability-Grafana-F46800?style=for-the-badge&logo=grafana&logoColor=white)
-![5G RAN](https://img.shields.io/badge/Network-5G%20RAN%20Slicing-FF0055?style=for-the-badge)
+![Database](https://img.shields.io/badge/TSDB-InfluxDB%202.7-22ADF6?style=for-the-badge&logo=influxdb&logoColor=white)
+![Observability](https://img.shields.io/badge/Observability-Grafana-F46800?style=for-the-badge&logo=grafana&logoColor=white)
 ![License](https://img.shields.io/badge/License-MIT-success?style=for-the-badge)
 
 ---
 
-## 📌 Executive Summary
+## 🛰️ System Overview
 
-Modern educational facilities and industrial workspaces suffer from severe energy inefficiency and delayed environmental remediation due to legacy, rule-based HVAC systems. This project introduces a **closed-loop, edge-computed Industrial IoT (IIoT) architecture** that combines on-chip statistical anomaly rejection, real-time thermodynamic machine learning, and dynamic **5G Radio Access Network (RAN) Quality of Service (QoS) slicing**.
+Legacy classroom climate systems waste energy and react too slowly to environmental changes. This project introduces a **closed-loop, edge-computed IIoT architecture** designed to solve three industrial challenges simultaneously:
 
-By decoupling physical sensor noise from automated control logic, the system maintains strict **ASHRAE / ISO 7730 thermal comfort standards** while achieving up to **91.4% energy savings** over baseline industrial consumption—all while actively defending against hardware short-circuits and cyber data-poisoning attacks in real time.
+* **Predictive Energy Economizer:** Replaces rule-based thermostats with online machine learning (`SGDRegressor`) to forecast room temperature **+15 minutes ahead**, cutting HVAC power consumption by up to **91.4%**.
+* **On-Chip Cybersecurity:** Microcontrollers natively filter electrical noise and block malicious data-poisoning attacks before telemetry ever leaves the physical room.
+* **5G RAN Network Slicing:** Dynamically shifts wireless reporting rates between standard mobile broadband and critical ultra-reliable slices based on real-time network latency and sensor health.
 
 ---
 
-## 🏛️ System Architecture & The 3 Pillars
+## 🧬 Core Architecture & The 3 Pillars
 
-### I. Embedded Perception & 3-Layer Cybersecurity Shield
-Microcontrollers deployed in physical environments are inherently vulnerable to electrical noise, sensor degradation, and malicious data injection. The ESP32 firmware implements an on-chip, defense-in-depth statistical filtering pipeline prior to network transmission:
+### I. 🛡️ On-Chip Perception & 3-Layer Cyber Shield
+To prevent corrupted sensor spikes or cyber injection attacks from triggering HVAC relays, the ESP32 executes a 3-layer statistical gating pipeline directly in silicon:
 
 ```mermaid
 graph TD
-    A[Raw Sensor Input] --> B{Layer 1: Hard Physical Gate<br/>10°C to 45°C | 5% to 99% RH}
+    A[Raw Sensor Input] --> B{Layer 1: Physical Gate<br/>10°C to 45°C | 5% to 99% RH}
     B -- Out of Bounds --> C[🚨 HARD FAULT: Quarantine Kalman<br/>Hold Last Known Valid Estimate]
     B -- Plausible --> D[Layer 2: Quarantined Kalman Filter<br/>Recursive Error Estimation]
-    D --> E{Layer 3: Rolling Z-Score Guard<br/>Evaluate Residual against σ}
+    D --> E{Layer 3: Z-Score Guard<br/>Evaluate Residual against σ}
     E -- Z > 3.0σ --> F[🚨 STATISTICAL SPIKE: Trap Attack<br/>Increment Leaky Bucket Counter]
     E -- Z ≤ 3.0σ --> G[✔️ HEALTHY: Update Variance Buffer<br/>Dispatch Telemetry Frame]
     F -- 4 Consecutive Anomalies --> H[🔄 STEP-CHANGE RECOVERY<br/>Auto-Reconverge Kalman & Reset Z-Guard]
 
 ```
 
-* **Layer 1 (Hard Physical Plausibility Gating):** Immediately discards physically impossible readings (e.g., $80^\circ\text{C}$ hardware spikes or $-40^\circ\text{C}$ open circuits), preventing corrupted data from entering statistical buffers.
-* **Layer 2 (Quarantined Kalman Filtering):** An adaptive recursive filter that smooths gaussian environmental noise. Upon detecting a Layer 1 or Layer 3 anomaly, the filter enters **quarantine mode**, freezing its state estimation to hold steady-state control logic.
-* **Layer 3 (Clamped Z-Score Anomaly Guard):** A rolling standard deviation engine ($\sigma$) that tracks estimation residuals. Outliers exceeding $3.0\sigma$ are trapped as cyber injection attacks.
-* **Step-Change Deadlock Breaker:** A leaky-bucket recovery algorithm that prevents latched alarms. If 4 consecutive valid-bound anomalies occur, the system identifies a legitimate environmental step-change (e.g., sudden window opening) and autonomously reconverges the Kalman filter and Z-score memory.
+* **Layer 1 (Physical Plausibility Gate):** Instantly rejects impossible hardware spikes (**80°C** or **-40°C**) before they enter memory buffers.
+* **Layer 2 (Quarantined Kalman Filter):** Smooths Gaussian noise. If an anomaly is detected, it freezes estimation updates to hold steady-state HVAC control.
+* **Layer 3 (Rolling Z-Score Guard):** Tracks standard deviation ($\sigma$) over a 15-frame window. Outliers exceeding **3.0σ** are trapped as injection attacks.
+* **Step-Change Recovery Engine:** Prevents latched alarms. If 4 consecutive valid-bound anomalies arrive, the MCU recognizes a physical environmental shift (e.g., an open window) and autonomously reconverges.
 
 ---
 
-### II. Dynamic 5G RAN Slicing & Closed-Loop Telemetry
+### II. 📡 5G RAN Slicing & Adaptive QoS Control
 
-The system communicates over an asynchronous MQTT v1/v2 pipeline utilizing unacknowledged **QoS 0** packet delivery to eliminate handshake latency across public cloud brokers (`broker.emqx.io`).
+The Linux Edge Gateway continuously monitors Radio Access Network (RAN) round-trip time via hardware timestamps, decoupling network logic from web simulation throttling.
 
 ```mermaid
 sequenceDiagram
@@ -56,7 +57,7 @@ sequenceDiagram
     participant TSDB as InfluxDB & Grafana
 
     MCU->>Broker: Publish Telemetry (eMBB Slice | 2000ms rate)
-    Broker->>Gateway: Ingest Packet (Calculate Hardware RTT Delta)
+    Broker->>Gateway: Ingest Packet (Compute Hardware RTT Delta)
     
     alt RTT > 120ms OR Cyber Shield Alarm Active
         Gateway->>Gateway: Shift Slice -> 5G_URLLC_CRITICAL
@@ -72,27 +73,25 @@ sequenceDiagram
 
 ```
 
-* **True Hardware RTT Tracking:** The gateway computes network latency using MCU hardware timestamps (`timestamp_ms`), making latency calculations 100% immune to web sandbox or virtual machine clock throttling.
-* **Active Rate Adaptation:** When network congestion ($>120\text{ms}$ RTT) or sensor attacks occur, the gateway dynamically commands the ESP32 to shift from **`5G_eMBB_Standard`** (Enhanced Mobile Broadband, 2000ms interval) to **`5G_URLLC_CRITICAL`** (Ultra-Reliable Low-Latency Communication, 5000ms interval), preserving critical radio bandwidth for emergency safety alarms.
+* **`5G_eMBB_Standard` (2000ms rate):** Default high-frequency reporting during normal classroom operations and healthy radio links.
+* **`5G_URLLC_CRITICAL` (5000ms rate):** Activated automatically when network latency exceeds **120ms** or when a sensor attack is detected. Throttles background telemetry to preserve wireless bandwidth for critical actuator overrides.
 
 ---
 
-### III. Edge AI & Predictive Thermodynamic Economizer
+### III. 🧠 Edge AI & ISO 7730 Comfort Engine
 
-The Linux gateway hosts an online machine learning engine and international environmental comfort calculators that replace reactive thermostats with predictive climate modeling:
-
-* **Thermodynamic Machine Learning (`SGDRegressor`):** Continuously trains on localized temperature, humidity, occupancy count, and human body heat gain ($100\text{W}$ per person) using regularized Stochastic Gradient Descent ($\alpha=0.0001$). It predicts room temperature **+15 minutes into the future**.
-* **Model Poisoning Defense:** When the embedded Cyber Shield signals a sensor fault, the Linux gateway immediately freezes SGD weight updates (`🚨 [ML PROTECTED]`), ensuring outlier attacks cannot corrupt the neural regression weights.
-* **ASHRAE / ISO 7730 Comfort Index:** Calculates the Predicted Mean Vote (PMV) thermal comfort index on a scale from $-3.0$ (Cold) to $+3.0$ (Hot), maintaining localized comfort between $-0.5$ and $+0.5$.
-* **Actuator State-Gating:** GPIO relay commands are gated by physical hardware state checks (`if (digitalRead(pin) != targetState)`), eliminating electromagnetic relay chattering and serial log spam.
+* **Thermodynamic Forecasting:** An online `SGDRegressor` ($\alpha=0.0001$) models human body heat gain (**100W per student**) to predict thermal velocity.
+* **Model Poisoning Defense:** When the embedded Cyber Shield flags a fault, the Linux daemon freezes weight updates (`🚨 [ML PROTECTED]`) to prevent neural drift.
+* **ISO 7730 PMV Comfort Index:** Calculates thermal comfort from **-3.0** (Cold) to **+3.0** (Hot), dynamically switching cooling stages to keep occupants within the **-0.5 to +0.5** ideal zone.
+* **Hardware State-Gating:** GPIO relays only execute commands when physical pin states transition, completely eliminating relay chatter and serial log spam.
 
 ---
 
-## 📐 Mathematical Formulations
+## 🧮 Mathematical Formulations
 
-### 1. Recursive Quarantined Kalman Filter
+### 1. Quarantined Recursive Kalman Filter
 
-The on-chip state estimation predicts and updates thermal velocity while isolating measurement errors:
+State estimation updates thermal velocity while isolating measurement spikes:
 
 $$\hat{x}_k^- = \hat{x}_{k-1}$$
 
@@ -100,160 +99,115 @@ $$P_k^- = P_{k-1} + Q$$
 
 $$K_k = \frac{P_k^-}{P_k^- + R}$$
 
-$$\hat{x}_k = \hat{x}_k^- + K_k \left( z_k - \hat{x}_k^- \right)$$
+$$\hat{x}_k = \hat{x}_k^- + K_k \left(z_k - \hat{x}_k^-\right)$$
 
-$$P_k = \left( 1 - K_k \right) P_k^-$$
+$$P_k = \left(1 - K_k\right) P_k^-$$
 
-*Where $Q = 0.01$ (process noise covariance), $R = 2.0$ (measurement noise covariance), and $K_k$ is the adaptive Kalman gain. If $\vert{}z_k - \hat{x}_k^-\vert{} > 3.0\sigma$, $K_k$ is forced to $0$, holding $\hat{x}_k = \hat{x}_{k-1}$.*
-
----
-
-### 2. Clamped Rolling Z-Score Anomaly Guard
-
-Statistical variance is evaluated over a sliding window of $N=15$ residuals, with clamping applied to prevent division-by-zero during steady-state classroom periods:
-
-$$\mu = \frac{1}{N} \sum_{i=1}^{N} r_i, \quad \text{where } r_i = \vert{}z_i - \hat{x}_i\vert{}$$
-
-$$\sigma = \sqrt{ \frac{1}{N} \sum_{i=1}^{N} \left( r_i - \mu \right)^2 }, \quad \text{subject to } 0.15 \le \sigma \le 2.50$$
-
-$$Z = \frac{\vert{}r_k - \mu\vert{}}{\sigma}$$
+*Where process noise $Q = 0.01$, measurement noise $R = 2.0$, and $K_k$ is the Kalman gain. During quarantine, $K_k \to 0$, holding $\hat{x}_k = \hat{x}_{k-1}$.*
 
 ---
 
-### 3. ISO 7730 PMV Comfort Index Approximation
+### 2. Clamped Z-Score Anomaly Guard
 
-Thermal comfort is derived from partial water vapor pressure ($p_a$) and heat transfer coefficients:
+Variance is evaluated over a sliding window of $N=15$ residuals, clamped to prevent steady-state division by zero:
 
-$$p_a = \left( \frac{\text{RH}}{100} \right) \cdot 10 \cdot \exp \left( 16.6536 - \frac{4030.18}{T + 235} \right)$$
+$$\mu = \frac{1}{N} \sum_{i=1}^{N} r_i, \quad \text{where } r_i = |z_i - \hat{x}_i|$$
 
-$$\text{PMV} = \left( 0.303 \exp(-0.036 M) + 0.028 \right) \cdot \left[ (M - W) - H_{\text{evap}} - H_{\text{conv}} - H_{\text{rad}} \right]$$
+$$\sigma = \sqrt{\frac{1}{N} \sum_{i=1}^{N} \left(r_i - \mu\right)^2}, \quad \text{subject to } 0.15 \le \sigma \le 2.50$$
 
-*Where $T$ is filtered temperature ($^\circ\text{C}$), $\text{RH}$ is relative humidity ($\%$), $M=58\text{ W/m}^2$ (metabolic rate for seated students), and $W=0$ (external work).*
-
----
-
-### 4. Real-Time Economizer Efficiency Gain
-
-Energy savings are computed by comparing real-time AI actuator loads against a baseline industrial HVAC continuous draw ($P_{\text{base}} = 3500\text{W}$):
-
-$$\text{Savings}(\%) = \max \left( 0.0, \left[ 1.0 - \frac{P_{\text{hvac}} + P_{\text{vent}}}{P_{\text{base}}} \right] \times 100 \right)$$
-
-*Where $P_{\text{hvac}} \in \{0\text{W}, 300\text{W}, 1200\text{W}, 2500\text{W}\}$ based on ECO standby, pre-cooling, or active compressor states, and $P_{\text{vent}} = 400\text{W}$ during active economizer exhaust ventilation.*
+$$Z = \frac{|r_k - \mu|}{\sigma}$$
 
 ---
 
-## 🛠️ System Hardware & Pinout Matrix
+### 3. ISO 7730 PMV Thermal Comfort Index
 
-The microcontroller perception node is engineered for the **ESP32-WROOM-32** development board. Analog industrial gas sensors are modeled via voltage dividers in simulation environments.
+Derived from partial water vapor pressure ($p_a$) and metabolic heat transfer:
 
-| Component | MCU Pin | I/O Type | Physical Function / Simulation Mapping | Actuator / Safe-State |
+$$p_a = \left(\frac{\text{RH}}{100}\right) \cdot 10 \cdot \exp\left(16.6536 - \frac{4030.18}{T + 235}\right)$$
+
+$$\text{PMV} = \left(0.303 \exp(-0.036 M) + 0.028\right) \cdot \left[(M - W) - H_{\text{evap}} - H_{\text{conv}} - H_{\text{rad}}\right]$$
+
+*Where $T$ is filtered temperature, $\text{RH}$ is relative humidity, metabolic rate $M=58\text{ W/m}^2$, and external work $W=0$.*
+
+---
+
+### 4. Real-Time Energy Economizer Efficiency
+
+Savings are calculated against an industrial baseline continuous draw ($P_{\text{base}} = 3500\text{W}$):
+
+$$\text{Savings}(\%) = \max\left(0.0, \left[1.0 - \frac{P_{\text{hvac}} + P_{\text{vent}}}{P_{\text{base}}}\right] \times 100\right)$$
+
+*Where $P_{\text{hvac}} \in \{0\text{W}, 300\text{W}, 1200\text{W}, 2500\text{W}\}$ based on ECO standby, pre-cooling, or active cooling compressor states, and $P_{\text{vent}} = 400\text{W}$ during active economizer ventilation.*
+
+---
+
+## 🔌 Hardware Pinout & Actuator Matrix
+
+Engineered for the **ESP32-WROOM-32** microcontroller. In virtual environments, analog sensors map directly to interactive UI sliders.
+
+| Component | MCU Pin | I/O Type | Physical Function & Mapping | Actuator & Safe-State Behavior |
 | --- | --- | --- | --- | --- |
-| **DHT22 Sensor** | `GPIO 15` | Digital In | Captures ambient Temperature ($^\circ\text{C}$) and Humidity ($\% \text{RH}$) | Out-of-bounds trigger ($<10^\circ\text{C}$ or $>45^\circ\text{C}$) |
-| **MQ135 Gas Sensor** | `GPIO 34` | Analog In | Measures air quality ($\text{CO}_2$). Simulated via $10\text{k}\Omega$ slide potentiometer ($0\text{V}$–$3.3\text{V} \rightarrow 400$–$2000\text{ PPM}$) | Exceeding $1000\text{ PPM}$ triggers active exhaust |
-| **PIR Motion Sensor** | `GPIO 13` | Digital In | Detects classroom occupancy. Maps digital HIGH to student count ($0 \text{ or } 25$) | Zero occupancy shifts HVAC to ECO Standby |
-| **HVAC Relay (Blue LED)** | `GPIO 2` | Digital Out | Controls primary cooling compressor. In series with $220\Omega$ current-limiting resistor | Gated transition: STANDBY (LOW) $\leftrightarrow$ ENERGIZED (HIGH) |
-| **Exhaust Relay (Red LED)** | `GPIO 4` | Digital Out | Controls economizer exhaust ventilation fan. In series with $220\Omega$ resistor | Gated transition: STANDBY (LOW) $\leftrightarrow$ ENERGIZED (HIGH) |
+| **DHT22 Sensor** | `GPIO 15` | Digital In | Temperature (**°C**) and Humidity (**% RH**) | Out-of-bounds trigger (<**10°C** or >**45°C**) |
+| **MQ135 Gas Sensor** | `GPIO 34` | Analog In | Air quality (**CO2**). Mapped to 10kΩ slide potentiometer (**400**–**2000 PPM**) | Crossing **1000 PPM** triggers active exhaust |
+| **PIR Motion Sensor** | `GPIO 13` | Digital In | Occupancy detection. Maps HIGH to student count (**25**) | Zero occupancy drops HVAC to ECO Standby |
+| **HVAC Compressor** | `GPIO 2` | Digital Out | Active cooling relay (Blue LED with 220Ω resistor) | Gated transition: STANDBY (LOW) $\leftrightarrow$ ENERGIZED (HIGH) |
+| **Exhaust Economizer** | `GPIO 4` | Digital Out | Ventilation purge relay (Red LED with 220Ω resistor) | Gated transition: STANDBY (LOW) $\leftrightarrow$ ENERGIZED (HIGH) |
 
 ---
 
-## 🚀 Quick-Start Execution Guide
+## 🧪 Quick-Start Setup Guide
 
-### Prerequisites
+### 1. Launch the Linux Edge Gateway
 
-* **Linux Environment:** Ubuntu 20.04+, macOS (Apple Silicon M1/M2/M3 native or Linux VM), or Windows WSL2.
-* **Python:** Version `3.10` or higher.
-* **Time-Series Stack:** Local or Docker instance of **InfluxDB v2.7+** and **Grafana v9.0+**.
-* **Digital Twin Simulator:** Web browser with access to [Wokwi ESP32 Simulator](https://wokwi.com).
-
----
-
-### Step 1: Clone & Configure the Linux Edge Gateway
-
-1. Clone the repository and navigate into the workspace:
 ```bash
+# Clone repository and configure virtual environment
 git clone [https://github.com/your-username/smart-classroom-iiot.git](https://github.com/your-username/smart-classroom-iiot.git)
 cd smart-classroom-iiot
-
-```
-
-
-2. Create and activate a isolated Python virtual environment:
-```bash
 python3 -m venv venv
 source venv/bin/activate
 
-```
-
-
-3. Install core enterprise dependencies:
-```bash
+# Install IIoT enterprise dependencies
 pip install --upgrade pip
 pip install paho-mqtt influxdb-client scikit-learn numpy
 
-```
-
-
-4. Launch the automated Edge AI Gateway Daemon:
-```bash
+# Launch the 5G Edge AI Daemon
 python3 edge-daemon/edge_ai_daemon.py
 
 ```
 
+### 2. Boot the Digital-Twin Microcontroller
 
-*Verify in your terminal:* You should immediately see confirmation logs stating `Connected to 5G Cloud MQTT Broker (broker.emqx.io)` and `Subscribed to topic [smart_classroom/telemetry/raw] with QoS 0 successfully!`.
+1. Open a new project on **[Wokwi ESP32 Simulator](https://wokwi.com/projects/new/esp32)**.
+2. Paste `firmware/src/main.cpp` into **`sketch.ino`**.
+3. Paste `firmware/diagram.json` into **`diagram.json`**.
+4. Create a **`libraries.txt`** tab and add: `PubSubClient`, `ArduinoJson`, and `DHT sensor library`.
+5. Press **`F1`** and select **Reload Diagram** to generate the circuit canvas, then click **Play**.
+
+### 3. Connect InfluxDB & Grafana
+
+1. Access Grafana at `http://localhost:3000` and link your local InfluxDB **v2.7+** instance.
+2. Import `dashboards/grafana-iiot-layout.json`.
+3. *TSDB Clean Schema:* Notice state variables (`mode`, `sensor_health`, `network_slice`) query as InfluxDB **Fields**, ensuring one unbroken time-series line per sensor and zero widget fragmentation.
 
 ---
 
-### Step 2: Deploy the Wokwi Digital-Twin Hardware
+## 🚧 Production Engineering Guardrails
 
-1. Open a blank ESP32 project in your browser: **[https://wokwi.com/projects/new/esp32](https://wokwi.com/projects/new/esp32)**.
-2. In the **`sketch.ino`** tab, paste the complete C++ firmware code from `firmware/src/main.cpp`.
-3. In the **`diagram.json`** tab, paste the exact hardware circuit layout from `firmware/diagram.json`.
-4. Create a **`libraries.txt`** tab (click the `+` icon) and add:
-```text
-PubSubClient
-ArduinoJson
-DHT sensor library
+* **The 256-Byte Memory Trap:** By default, Arduino `PubSubClient` caps buffers at **256 bytes**. Because Phase 7 JSON frames reach **~275 bytes**, failing to call `mqttClient.setBufferSize(1024);` in `setup()` will cause silent **100% packet drops**.
+* **Callback Stack Corruption:** Never assign raw stack pointers (`const char*`) from temporary JSON documents to global variables inside MQTT callbacks. Always use static stack arrays (`strlcpy(dest, src, sizeof(dest))`) or managed `String` objects to prevent fatal heap corruption.
+* **Simulator Wall-Clock Drift:** Web sandboxes throttle CPU execution. Always compute RAN latency against MCU hardware timestamps (`payload["timestamp_ms"]`) rather than host wall-clock time (`time.time()`), or browser lag will trigger false 5G URLLC slicing.
+* **TSDB Tag Cardinality:** Never store mutable state strings (`mode`, `sensor_health`) as InfluxDB **Tags**. Tags spawn isolated database tables, causing Grafana to fragment charts into repetitive, broken UI series. Always store dynamic states as **Fields**.
 
 ```
 
-
-5. **The Magic Reload:** Click inside the code editor, press **`F1`** on your keyboard, and select **"Reload Diagram"** (or click the Save/Share button). The visual engine will instantly wire your DHT22, slide potentiometer, PIR sensor, resistors, and LEDs onto the canvas.
-6. Click the green **Play** button to boot the microcontroller.
-
 ---
 
-### Step 3: Configure Grafana Time-Series Observability
+### Push Your New Showcase README:
+Open your Linux terminal and push this clean build straight to GitHub:
 
-1. Access your Grafana UI at `http://localhost:3000`.
-2. Add InfluxDB as a data source pointing to your bucket (`classroom_telemetry`).
-3. Import the pre-built dashboard JSON located in `dashboards/grafana-iiot-layout.json`.
-4. **Clean Schema Verification:** Notice that state variables (`mode`, `sensor_health`, `network_slice`) are queried as InfluxDB **Fields**, not Tags. This guarantees exactly **one unbroken time-series curve** per sensor and zero visual widget fragmentation!
-
----
-
-## ⚠️ Production Cautions & Architectural Edge-Cases
-
-During enterprise deployment or hardware modification, adhere strictly to these engineering guardrails established during post-mortem audits:
-
-> **1. The 256-Byte PubSubClient Memory Trap**
-> By default, the Arduino `PubSubClient` library allocates a hardcoded memory limit of 256 bytes for outgoing frames. Because Phase 7 enterprise JSON telemetry (containing 5G slice strings, timestamps, and floating-point sensor matrices) reaches ~275 bytes, **failing to explicitly expand the buffer will cause silent 100% packet drops!** Always ensure `mqttClient.setBufferSize(1024);` is called inside `setup()`.
-
-> **2. Stack Memory Corruption in JSON Callbacks**
-> Never assign raw pointers (`const char*`) to global variables directly from temporary `StaticJsonDocument` stack allocations inside MQTT message callbacks. When the function returns, stack memory is deallocated, causing silent garbage character injection or fatal MCU crashes. Always use managed `String` objects or static stack arrays (`strlcpy(target, source, sizeof(target))`).
-
-> **3. Web Simulator Wall-Clock Throttling vs. Hardware RTT**
-> Sandbox environments like Wokwi throttle execution to ~30% real-time speed depending on browser CPU load. Never compute network round-trip time using host wall-clock deltas (`time.time() - last_arrival`), or browser lag will be misidentified as severe RAN network congestion. Always compute RTT latency against **microcontroller hardware clock timestamps (`payload["timestamp_ms"]`)**.
-
-> **4. TSDB Tag Cardinality & UI Fragmentation**
-> Never store highly mutable state strings (`mode`, `sensor_health`, `network_slice`) as InfluxDB **Tags (`.tag()`)**. In time-series database modeling, every unique tag combination spawns a new, isolated database table. If stored as tags, Grafana will split your dashboard into multiple repetitive UI widgets and broken line segments. Always store dynamic states as **Fields (`.field()`)**.
-
----
-
-## 📜 License & Research Attribution
-
-This engineering architecture is released under the **MIT License**. Engineered for industrial ECE research, advanced edge computing showcases, and autonomous smart building implementations.
-
-```
+```bash
+git add README.md
+git commit -m "docs: polish README with crisp engineering prose and technical aesthetic emojis"
+git push
 
 ```
