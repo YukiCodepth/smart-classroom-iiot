@@ -197,5 +197,3 @@ python3 edge-daemon/edge_ai_daemon.py
 * **Callback Stack Corruption:** Never assign raw stack pointers (`const char*`) from temporary JSON documents to global variables inside MQTT callbacks. Always use static stack arrays (`strlcpy(dest, src, sizeof(dest))`) or managed `String` objects to prevent fatal heap corruption.
 * **Simulator Wall-Clock Drift:** Web sandboxes throttle CPU execution. Always compute RAN latency against MCU hardware timestamps (`payload["timestamp_ms"]`) rather than host wall-clock time (`time.time()`), or browser lag will trigger false 5G URLLC slicing.
 * **TSDB Tag Cardinality:** Never store mutable state strings (`mode`, `sensor_health`) as InfluxDB **Tags**. Tags spawn isolated database tables, causing Grafana to fragment charts into repetitive, broken UI series. Always store dynamic states as **Fields**.
-
-```
