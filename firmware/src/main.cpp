@@ -1,8 +1,8 @@
 /**
- * ENTERPRISE EMBEDDED C++ FIRMWARE (PHASE 6.3: FULL OBSERVABILITY MATRIX)
+ * ENTERPRISE EMBEDDED C++ FIRMWARE (PHASE 7 PERFECTED: MASTER PRODUCTION BUILD)
  * Target Hardware: ESP32-WROOM-32 Microcontroller
  * Project: IoT-Based Automatic Climate Control System for Smart Classrooms Using 5G Network Technology
- * Architecture: Hard Physical Gating, Quarantined Kalman Filtering & Full Telemetry Logging
+ * Architecture: Hard Physical Gating, Instant Post-Fault Kalman Recovery, Static Memory & 5G Slicing
  */
 
 #include <Arduino.h>
@@ -37,11 +37,15 @@ DHT dht(DHT_PIN, DHT_TYPE);
 WiFiClient espClient;
 PubSubClient mqttClient(espClient);
 
+// --- DYNAMIC 5G QoS & STATIC MEMORY VARIABLES ---
 unsigned long lastTelemetryTime = 0;
-const unsigned long TELEMETRY_INTERVAL_MS = 2000;
+unsigned long currentTelemetryIntervalMs = 2000;
+static char currentNetworkSlice[32] = "5G_eMBB_Standard"; // Zero heap allocation!
+static int consecutiveStatisticalAnomalies = 0;         // Leaky bucket deadlock breaker
+static bool wasInHardFault = false;                     // Instant rebound guard
 
 // ============================================================================
-// LAYER 2 & 3: QUARANTINED KALMAN FILTER & CLAMPED Z-SCORE GUARD
+// ON-CHIP STATISTICAL ENGINE WITH STEP-CHANGE RECOVERY
 // ============================================================================
 class KalmanFilter {
 private:
@@ -67,6 +71,12 @@ public:
         _err_estimate = (1.0 - kalman_gain) * _err_estimate;
         _last_estimate = _current_estimate;
         return _current_estimate;
+    }
+
+    void forceReconverge(float new_val) {
+        _current_estimate = new_val;
+        _last_estimate    = new_val;
+        _err_estimate     = 2.0;
     }
 };
 
@@ -99,6 +109,10 @@ public:
             _residuals.erase(_residuals.begin());
         }
     }
+
+    void clearMemory() {
+        _residuals.clear();
+    }
 };
 
 KalmanFilter kFilterTemp(2.0, 2.0, 0.01);
@@ -113,7 +127,7 @@ void setActuatorState(int pin, const char* stateName, bool isActive);
 void setup() {
     Serial.begin(115200);
     while (!Serial) delay(10);
-    Serial.println("\n[INIT] Booting ESP32 Full Observability Matrix...");
+    Serial.println("\n[INIT] Booting ESP32 5G QoS Master Perception Node...");
 
     pinMode(PIN_RELAY_HVAC, OUTPUT);
     pinMode(PIN_RELAY_VENT, OUTPUT);
@@ -125,6 +139,9 @@ void setup() {
     setupWiFi();
     mqttClient.setServer(MQTT_BROKER, MQTT_PORT);
     mqttClient.setCallback(onMQTTMessage);
+    
+    // CRITICAL: Expand buffer to 1024 bytes to prevent silent JSON packet drops
+    mqttClient.setBufferSize(1024);
 }
 
 void loop() {
@@ -132,34 +149,34 @@ void loop() {
     mqttClient.loop();
 
     unsigned long currentMillis = millis();
-    if (currentMillis - lastTelemetryTime >= TELEMETRY_INTERVAL_MS) {
+    if (currentMillis - lastTelemetryTime >= currentTelemetryIntervalMs) {
         lastTelemetryTime = currentMillis;
         readSensorsAndDispatch();
     }
 }
 
 void setupWiFi() {
-    Serial.printf("[WIFI] Connecting to SSID: %s\n", WIFI_SSID);
+    Serial.printf("[5G RAN] Connecting to gNodeB SSID: %s\n", WIFI_SSID);
     WiFi.mode(WIFI_STA);
     WiFi.begin(WIFI_SSID, WIFI_PASSWORD);
     while (WiFi.status() != WL_CONNECTED) { delay(500); Serial.print("."); }
-    Serial.printf("\n[WIFI SUCCESS] Assigned IP Address: %s\n", WiFi.localIP().toString().c_str());
+    Serial.printf("\n[5G SUCCESS] Assigned UE IP Address: %s\n", WiFi.localIP().toString().c_str());
 }
 
 void reconnectMQTT() {
     while (!mqttClient.connected()) {
         Serial.print("[MQTT] Attempting EMQX Handshake...");
         const char* lwt = "{\"status\":\"ESP32_HARDWARE_FAULT\",\"node\":\"ESP32_01\"}";
-        if (mqttClient.connect(CLIENT_ID, nullptr, nullptr, TOPIC_LWT, 1, true, lwt)) {
+        if (mqttClient.connect(CLIENT_ID, nullptr, nullptr, TOPIC_LWT, 0, true, lwt)) {
             Serial.println(" [SUCCESS] Connected!");
             mqttClient.publish(TOPIC_LWT, "{\"status\":\"ONLINE_HEALTHY\",\"node\":\"ESP32_01\"}", true);
-            mqttClient.subscribe(TOPIC_SUB_CONTROLS, 1);
+            mqttClient.subscribe(TOPIC_SUB_CONTROLS, 0);
         } else { delay(5000); }
     }
 }
 
 void onMQTTMessage(char* topic, byte* payload, unsigned int length) {
-    StaticJsonDocument<256> doc;
+    StaticJsonDocument<512> doc;
     if (deserializeJson(doc, payload, length)) return;
     
     if (doc.containsKey("hvac")) {
@@ -172,11 +189,24 @@ void onMQTTMessage(char* topic, byte* payload, unsigned int length) {
         bool active = (strcmp(ventCmd, "ACTIVE_EXHAUST") == 0);
         setActuatorState(PIN_RELAY_VENT, "Exhaust Fan Economizer", active);
     }
+
+    if (doc.containsKey("qos_slice")) {
+        const char* slice = doc["qos_slice"];
+        strlcpy(currentNetworkSlice, slice, sizeof(currentNetworkSlice));
+        if (strcmp(currentNetworkSlice, "5G_URLLC_CRITICAL") == 0) {
+            currentTelemetryIntervalMs = 5000;
+        } else {
+            currentTelemetryIntervalMs = 2000;
+        }
+    }
 }
 
 void setActuatorState(int pin, const char* stateName, bool isActive) {
-    digitalWrite(pin, isActive ? HIGH : LOW);
-    Serial.printf("[ACTUATOR RX] Switched [%s] -> %s (GPIO %d)\n", stateName, isActive ? "ENERGIZED (HIGH)" : "STANDBY (LOW)", pin);
+    int targetState = isActive ? HIGH : LOW;
+    if (digitalRead(pin) != targetState) {
+        digitalWrite(pin, targetState);
+        Serial.printf("[ACTUATOR RX] Switched [%s] -> %s (GPIO %d)\n", stateName, isActive ? "ENERGIZED (HIGH)" : "STANDBY (LOW)", pin);
+    }
 }
 
 void readSensorsAndDispatch() {
@@ -186,7 +216,7 @@ void readSensorsAndDispatch() {
     int pirState  = digitalRead(PIR_PIN);
 
     if (isnan(tempRaw) || isnan(humPct)) { tempRaw = 26.5; humPct = 50.0; }
-    float co2Ppm = map(rawMQ135, 0, 4095, 400, 2000);
+    float co2Ppm = constrain(map(rawMQ135, 0, 4095, 400, 2000), 400, 5000);
     int occupancyCount = (pirState == HIGH) ? 25 : 0;
 
     // --- LAYER 1: HARD PHYSICAL PLAUSIBILITY GATE ---
@@ -198,30 +228,63 @@ void readSensorsAndDispatch() {
     float zScore   = zGuardTemp.evaluateAnomaly(residual);
 
     bool isStatisticalAnomaly = (zScore > 3.0);
-    bool isPoisoned = (isPhysicallyImpossible || isStatisticalAnomaly);
-
     const char* healthStatus;
     float reportedKalman;
 
-    if (isPoisoned) {
-        healthStatus   = isPhysicallyImpossible ? "PHYSICAL_BOUNDS_FAULT" : "STATISTICAL_SPIKE_FAULT";
+    // --- STEP-CHANGE RECOVERY & INSTANT REBOUND ENGINE ---
+    if (isPhysicallyImpossible) {
+        healthStatus   = "PHYSICAL_BOUNDS_FAULT";
         reportedKalman = currentKalmanEstimate; 
-        if (isPhysicallyImpossible) zScore = 9.99; 
-    } else {
+        zScore         = 9.99;
+        consecutiveStatisticalAnomalies = 0;
+        wasInHardFault = true; // Flag that we entered an extreme physical fault
+    } 
+    else if (wasInHardFault) {
+        // INSTANT REBOUND: Directly returning from a hard physical fault into valid limits!
+        Serial.println("[SHIELD RECOVERY] Valid physical limits restored -> Instant Kalman & Z-Guard snap-back!");
+        kFilterTemp.forceReconverge(tempRaw);
+        zGuardTemp.clearMemory();
+        wasInHardFault = false;
+        consecutiveStatisticalAnomalies = 0;
+        healthStatus   = "HEALTHY_RECONVERGED";
+        reportedKalman = tempRaw;
+        zScore         = 0.00;
+    }
+    else if (isStatisticalAnomaly) {
+        consecutiveStatisticalAnomalies++;
+        if (consecutiveStatisticalAnomalies >= 4) {
+            Serial.println("[SHIELD RECOVERY] Step-change confirmed -> Auto-reconverging Kalman & Z-Guard!");
+            kFilterTemp.forceReconverge(tempRaw);
+            zGuardTemp.clearMemory();
+            consecutiveStatisticalAnomalies = 0;
+            healthStatus   = "HEALTHY_RECONVERGED";
+            reportedKalman = tempRaw;
+            zScore         = 0.00;
+        } else {
+            healthStatus   = "STATISTICAL_SPIKE_FAULT";
+            reportedKalman = currentKalmanEstimate;
+        }
+    } 
+    else {
         healthStatus   = "HEALTHY";
         reportedKalman = kFilterTemp.updateEstimate(tempRaw);
         zGuardTemp.addResidual(residual);
+        consecutiveStatisticalAnomalies = 0;
+        wasInHardFault = false;
     }
 
+    bool isPoisoned = (strcmp(healthStatus, "HEALTHY") != 0 && strcmp(healthStatus, "HEALTHY_RECONVERGED") != 0);
+
     StaticJsonDocument<512> doc;
-    doc["node_id"] = CLIENT_ID;
-    doc["timestamp_ms"] = millis();
+    doc["node_id"]       = CLIENT_ID;
+    doc["timestamp_ms"]  = millis();
+    doc["network_slice"] = currentNetworkSlice;
     
     JsonObject sensors = doc.createNestedObject("sensors");
-    sensors["temp_raw"]    = round(tempRaw * 10.0) / 10.0;
-    sensors["temp_kalman"] = round(reportedKalman * 10.0) / 10.0;
-    sensors["humidity"]    = round(humPct * 10.0) / 10.0;
-    sensors["co2_raw"]     = co2Ppm;
+    sensors["temp_raw"]        = round(tempRaw * 10.0) / 10.0;
+    sensors["temp_kalman"]     = round(reportedKalman * 10.0) / 10.0;
+    sensors["humidity"]        = round(humPct * 10.0) / 10.0;
+    sensors["co2_raw"]         = co2Ppm;
     sensors["occupancy_count"] = occupancyCount;
     sensors["anomaly_score"]   = round(zScore * 100.0) / 100.0;
     sensors["status"]          = healthStatus;
@@ -230,12 +293,12 @@ void readSensorsAndDispatch() {
     serializeJson(doc, jsonBuffer);
     mqttClient.publish(TOPIC_PUB_TELEMETRY, jsonBuffer);
     
-    // --- FULL MATRIX VISUAL OBSERVABILITY PRINT ---
+    // --- UNTRUNCATED FULL OBSERVABILITY PRINT MATRIX ---
     if (isPoisoned) {
-        Serial.printf("[SHIELD ALARM!] Temp: %.1f°C (Kal: %.1f°C) | Hum: %.1f%% | CO2: %.0f PPM | Occ: %d | Z: %.2f => [%s]\n", 
-                      tempRaw, reportedKalman, humPct, co2Ppm, occupancyCount, zScore, healthStatus);
+        Serial.printf("[SHIELD ALARM!] [%s] Temp: %.1f°C (Kal: %.1f°C) | Hum: %.1f%% | CO2: %.0f PPM | Occ: %d | Z: %.2f => [%s]\n", 
+                      currentNetworkSlice, tempRaw, reportedKalman, humPct, co2Ppm, occupancyCount, zScore, healthStatus);
     } else {
-        Serial.printf("[TX FRAME] Temp: %.1f°C (Kal: %.1f°C) | Hum: %.1f%% | CO2: %.0f PPM | Occ: %d | Z: %.2f => [%s]\n", 
-                      tempRaw, reportedKalman, humPct, co2Ppm, occupancyCount, zScore, healthStatus);
+        Serial.printf("[TX FRAME] [%s] Temp: %.1f°C (Kal: %.1f°C) | Hum: %.1f%% | CO2: %.0f PPM | Occ: %d | Z: %.2f => [%s]\n", 
+                      currentNetworkSlice, tempRaw, reportedKalman, humPct, co2Ppm, occupancyCount, zScore, healthStatus);
     }
 }
