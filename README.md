@@ -27,13 +27,13 @@ To prevent corrupted sensor spikes or cyber injection attacks from triggering HV
 
 ```mermaid
 graph TD
-    A["Raw Sensor Input"] --> B{"Layer 1: Physical Gate<br/>10°C to 45°C | 5% to 99% RH"}
-    B -- Out of Bounds --> C["🚨 HARD FAULT: Quarantine Kalman<br/>Hold Last Known Valid Estimate"]
-    B -- Plausible --> D["Layer 2: Quarantined Kalman Filter<br/>Recursive Error Estimation"]
-    D --> E{"Layer 3: Z-Score Guard<br/>Evaluate Residual against σ"}
-    E -- Z > 3.0σ --> F["🚨 STATISTICAL SPIKE: Trap Attack<br/>Increment Leaky Bucket Counter"]
-    E -- Z ≤ 3.0σ --> G["✔️ HEALTHY: Update Variance Buffer<br/>Dispatch Telemetry Frame"]
-    F -- 4 Consecutive Anomalies --> H["🔄 STEP-CHANGE RECOVERY<br/>Auto-Reconverge Kalman & Reset Z-Guard"]
+    A["Raw Sensor Input"] --> B{{"Layer 1: Physical Gate<br/>10°C–45°C | 5%–99% RH"}}
+    B -- Out of Bounds --> C["🚨 HARD FAULT<br/>Quarantine Kalman & Hold"]
+    B -- Plausible --> D["Layer 2: Quarantined Kalman<br/>Recursive Error Estimation"]
+    D --> E{{"Layer 3: Z-Score Guard<br/>Evaluate Residual vs. σ"}}
+    E -- Z > 3.0σ --> F["🚨 STATISTICAL SPIKE<br/>Trap Attack & Bucket +1"]
+    E -- Z ≤ 3.0σ --> G["✔️ HEALTHY TELEMETRY<br/>Update Variance & Transmit"]
+    F -- 4 Consecutive --> H["🔄 STEP-CHANGE RECOVERY<br/>Auto-Reconverge Kalman"]
 
 ```    
 
